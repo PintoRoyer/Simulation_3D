@@ -8,12 +8,12 @@ Plot animations of clouds, pressure and wind at different levels at one time ste
 """
 
 import json
-from collections.abc import Iterable
+#from collections.abc import Iterable
 
 # import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 import numpy as np
-# from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import LinearSegmentedColormap
 
 from plots import Map
 from readers_3D import MesoNH, get_mesonh, get_time_index, index_to_lonlat
@@ -33,129 +33,97 @@ NO_ZOOM = (
 
 
 #PRESSURE
-def plot_pressure(resol_dx, level, args: Iterable):
-    """
-    Plot and save at format .png pressure maps at a certain level, timestep and resolution
+def plot_pressure(mesonh, my_map, resol_dx, level, *, anim = False):
 
-    Parameters
-    ----------
-    resol_dx : int
-        The resolution of the simulation.
-    level : int
-        The level of altitude at which the variables are observed 
-    args : iterable
-        The arguments to be given to ``plot_pressure`` it should be like:
-
-            args = (
-                ((i_min, i_max), (j_min, j_max), hour, minute),
-            )
-    """
+    var = mesonh.get_var("PABST", level=level)/100
+    contourf = my_map.plot_contourf(
+            var, cmap="turbo",extend="both", levels=np.linspace(lim_min, lim_max, 100)
+        )
     
-    mesonh = get_mesonh(resol_dx)
+    level_value = int(mesonh.level[level])
+    title = f"Simulation Méso-NH du 2022-08-18 à {time} (DX = {resol_dx} m)\nPression au niveau {level} (~{level_value} m) "
+    title = my_map.set_title(title)
     
-
-    for i_lim, j_lim, hour, minute, file_index in args:
-        mesonh.get_data(file_index)
-        time = f"{str(hour).zfill(2)}h{str(minute).zfill(2)}"
-
-        plt.close("all")
-
-        # Creating Map instance
-        my_map = Map(mesonh.longitude, mesonh.latitude)
     
-        # Information on zoom
-        lon = [0, 0]  # bornes min max lon
-        lat = [0, 0]  # bornes min max lat
-        lon[0], lat[0] = index_to_lonlat(mesonh, i_lim[0], j_lim[0])
-        lon[1], lat[1] = index_to_lonlat(mesonh, i_lim[1], j_lim[1])
-    
-        # # Limits for colorbars
-        with open(f"limits_3D/lim3D_{resol_dx}m.json", "r", encoding="utf-8") as file:
-            lim = json.loads(file.read())
-    
-        fig, axes, _ = my_map.init_axes(fig_kw={"figsize": (8, 5), "layout": "compressed"})
-        axes.set_extent([lon[0], lon[1], lat[0], lat[1]])
-      
-    
-        var = mesonh.get_var("PABST", level=level)/100
-        contourf = my_map.plot_contourf(
-                var, cmap="turbo",extend="both", levels=np.linspace(lim["pressure"][0], lim["pressure"][1], 100)
-            )
-        
+    if anim == False:
         cbar = plt.colorbar(contourf, label="Pression (hPa)")
-        cbar.set_ticks(np.round(np.linspace(lim["pressure"][0], lim["pressure"][1], 8)))
-        
-        print(var.min())
-        
-        level_value = int(mesonh.level[level])
-        plt.title(f"Simulation Méso-NH du 2022-08-18 à {time}\nPression au niveau {level} (~{level_value} m) ")
-        plt.savefig(f"pressue_lvl{level}_{time}_dx{resol_dx}.png")
+        cbar.set_ticks(np.round(np.linspace(lim_min, lim_max, 8)))
+        plt.savefig(f"pressure_lvl{level}_{time}_dx{resol_dx}.png")
+
+    return contourf, title, time, lim_min, lim_max
+
+#CLOUDS
+def sum_clouds(rct, rit, rgt, rst):
+    """Add up different thickness of the condensed states of water."""
+    return rct + rit + rgt + rst
+
+def plot_clouds(mesonh, my_map, resol_dx, level, *, anim = False):
+    var = mesonh.get_var("RCT", "RIT", "RGT", "RST", func=sum_clouds, level=level)
+    contourf = my_map.plot_contourf(
+            var, cmap=LinearSegmentedColormap.from_list("cmap2", ["black", "white", "blue", "red"]), extend="both", levels=np.linspace(var.min(), var.max(), 100)
+        )
+    
+    level_value = int(mesonh.level[level])
+    title = f"Simulation Méso-NH du 2022-08-18 à {time} (DX = {resol_dx} m)\nPression au niveau {level} (~{level_value} m) "
+    title = my_map.set_title(title)
+    
+    
+    if anim == False:
+        cbar = plt.colorbar(contourf, label="Pression (hPa)")
+        cbar.set_ticks(np.round(np.linspace(var.min(), var.max(), 8)))
+        plt.savefig(f"clouds_lvl{level}_{time}_dx{resol_dx}.png")
+
+    return contourf, title, time, lim_min, lim_max
 
 
-def plot_pressure_anim(resol_dx, args: Iterable):
-    """
-    Plot and save at format .gif pressure maps at a certain level, timestep and resolution
-
-    Parameters
-    ----------
-    resol_dx : int
-        The resolution of the simulation.
-    args : iterable
-        The arguments to be given to ``plot_pressure`` it should be like:
-
-            args = (
-                ((i_min, i_max), (j_min, j_max), hour, minute),
-            )
-    """
-    mesonh = get_mesonh(resol_dx)
-
-    for i_lim, j_lim, hour, minute, file_index in args:
-        mesonh.get_data(file_index)
-        time = f"{str(hour).zfill(2)}h{str(minute).zfill(2)}"
-        
+def plot_anim(mesonh, my_map, resol_dx, func):
+    frame = []
+    
+    for level in range(0, len(mesonh.level)):
         #print(mesonh.get_limits("PABST"))
+        contourf, title, time, lim_min, lim_max = func(mesonh, my_map, resol_dx, level, anim = True)
         
-        plt.close("all")
-    
-        # Creating Map instance
-        my_map = Map(mesonh.longitude, mesonh.latitude)
-    
-        # Information on zoom
-        lon = [0, 0]  # bornes min max lon
-        lat = [0, 0]  # bornes min max lat
-        lon[0], lat[0] = index_to_lonlat(mesonh, i_lim[0], j_lim[0])
-        lon[1], lat[1] = index_to_lonlat(mesonh, i_lim[1], j_lim[1])
-    
-        # Limits for colorbars
-        with open(f"limits_3D/lim3D_{resol_dx}m.json", "r", encoding="utf-8") as file:
-            lim = json.loads(file.read())
+        frame.append([contourf, title])
         
-        fig, axes, _ = my_map.init_axes(fig_kw={"figsize": (8, 5), "layout": "compressed"})
-        axes.set_extent([lon[0], lon[1], lat[0], lat[1]])
+    cbar = plt.colorbar(contourf, label="Pression (hPa)")
+    cbar.set_ticks(np.round(np.linspace(lim_min, lim_max, 8)))
     
-        frame = []    
+    animation = ArtistAnimation(fig, frame, interval=250)
+    animation.save(f"pressure_anim_{time}_dx{resol_dx}.gif")
     
-        for level in range(0, len(mesonh.level)):
-            var = mesonh.get_var("PABST", level=level)/100
-            contourf = my_map.plot_contourf(
-                var, cmap="turbo", extend="both", levels=np.linspace(lim["pressure"][0], lim["pressure"][1], 100)
-            )
-            level_value = int(mesonh.level[level])
-            title = f"Simulation Méso-NH du 2022-08-18 à {time}\nPression au niveau {level} (~{level_value} m) "
-            title = my_map.set_title(title)
-            
-            frame.append([contourf, title])
-            
-        cbar = plt.colorbar(contourf, label="Pression (hPa)")
-        cbar.set_ticks(np.round(np.linspace(lim["pressure"][0], lim["pressure"][1], 8)))
-        
-        animation = ArtistAnimation(fig, frame, interval=250)
-        
-        animation.save(f"pressure_anim_{time}_dx{resol_dx}.gif")
+    
+resol_dx = 1000
+level = 80
+index_echeance = 2
 
 
+mesonh = get_mesonh(resol_dx)
+i_lim, j_lim, hour, minute, file_index = NO_ZOOM[index_echeance]
+
+mesonh.get_data(file_index)
+time = f"{str(hour).zfill(2)}h{str(minute).zfill(2)}"
+
+# Creating Map instance
+my_map = Map(mesonh.longitude, mesonh.latitude)
+
+# Information on zoom
+lon = [0, 0]  # bornes min max lon
+lat = [0, 0]  # bornes min max lat
+lon[0], lat[0] = index_to_lonlat(mesonh, i_lim[0], j_lim[0])
+lon[1], lat[1] = index_to_lonlat(mesonh, i_lim[1], j_lim[1])
+
+# # Limits for colorbars
+with open(f"limits_3D/lim3D_{resol_dx}m.json", "r", encoding="utf-8") as file:
+    lim = json.loads(file.read())
+lim_min = lim["pressure"][0]
+lim_max = lim["pressure"][1]
+
+fig, axes, _ = my_map.init_axes(fig_kw={"figsize": (8, 5), "layout": "compressed"})
+axes.set_extent([lon[0], lon[1], lat[0], lat[1]])
 
 
-#plot_pressure(1000, 91, NO_ZOOM[0: 1])
-plot_pressure_anim(1000, NO_ZOOM[0:1])
+#plot_pressure(mesonh, my_map, resol_dx, level, )
+#plot_anim(mesonh, my_map, resol_dx, plot_pressure)
 
+#plot_clouds(mesonh, my_map, resol_dx, level, )
+plot_anim(mesonh, my_map, resol_dx, plot_clouds)
