@@ -26,6 +26,13 @@ DX250_ZOOM = (
     ((1470, 1940), (1650, 1930), 8, 45, 5),
 )
 
+def sum_clouds(rct, rit, rgt, rst):
+    """Add up different thickness of the condensed states of water."""
+    return rct + rit + rgt + rst
+
+def norm_wind(ut, vt):
+    return np.sqrt(ut**2 + vt**2)
+
 resol_dx = 250
 index_echeance = 0
 zoom = DX250_ZOOM
@@ -35,7 +42,15 @@ i_lim, j_lim, hour, minute, file_index = zoom[index_echeance]
 
 mesonh.get_data(file_index)
 
-var = (mesonh.get_var("PABST", level=range(22, 84))[:, j_lim[0]:j_lim[1], i_lim[0]:i_lim[1]])/100
+#var = (mesonh.get_var("PABST", level=range(0, 92))[:, j_lim[0]:j_lim[1], i_lim[0]:i_lim[1]])/100
+var = (mesonh.get_var("RCT", "RIT", "RGT", "RST", func=sum_clouds, level=range(0, 92))[:, j_lim[0]:j_lim[1], i_lim[0]:i_lim[1]])*100
+#var = (mesonh.get_var("RVT", level=range(0, 92))[:, j_lim[0]:j_lim[1], i_lim[0]:i_lim[1]])*100
+#var = (mesonh.get_var("UT", "VT", func=norm_wind, level=range(0, 92))[:, j_lim[0]:j_lim[1], i_lim[0]:i_lim[1]])*3.6
+#var = (mesonh.get_var("WT", level=range(0, 92))[:, j_lim[0]:j_lim[1], i_lim[0]:i_lim[1]])
+#var = (mesonh.get_var("THT", level=range(0, 92))[:, j_lim[0]:j_lim[1], i_lim[0]:i_lim[1]])-273.15
+#var = (mesonh.get_var("TKET", level=range(0, 92))[:, j_lim[0]:j_lim[1], i_lim[0]:i_lim[1]])
+
+
 
 print(var.min(), var.max())
 

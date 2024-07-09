@@ -62,7 +62,7 @@ class MesoNH:
         data = Dataset(self.files[0])
         self.longitude = data.variables["longitude"][:, :]
         self.latitude = data.variables["latitude"][:, :]
-        self.level = data.variables["level_w"][:]
+        self.level = data.variables["level"][:]
 
     def get_data(self, file_index: int):
         """

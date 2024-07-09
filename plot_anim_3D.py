@@ -89,7 +89,7 @@ def sum_clouds(rct, rit, rgt, rst):
 
 def plot_clouds(mesonh, my_map, zoom_name, resol_dx, level, *, anim = False):
     # # Limits for colorbars
-    with open(f"limits_3D/lim3D_{resol_dx}m.json", "r", encoding="utf-8") as file:
+    with open(f"limits_3D/lim3D_{zoom_name}_{resol_dx}m.json", "r", encoding="utf-8") as file:
         lim = json.loads(file.read())
     lim_min = 0
     lim_max = 19.55
@@ -117,7 +117,7 @@ def plot_clouds(mesonh, my_map, zoom_name, resol_dx, level, *, anim = False):
 #WATER VAPOR
 def plot_vapor(mesonh, my_map, zoom_name, resol_dx, level, *, anim = False):
     # # Limits for colorbars
-    with open(f"limits_3D/lim3D_{resol_dx}m.json", "r", encoding="utf-8") as file:
+    with open(f"limits_3D/lim3D_{zoom_name}_{resol_dx}m.json", "r", encoding="utf-8") as file:
         lim = json.loads(file.read())
     lim_min = lim["vapor"][0]
     lim_max = lim["vapor"][1]
@@ -153,7 +153,7 @@ def norm_quiver(ut, vt):
 def plot_horiz_wind(mesonh, my_map, zoom_name, resol_dx, level, *, anim = False):
     # # Limits for colorbars
     
-    with open(f"limits_3D/lim3D_{resol_dx}m.json", "r", encoding="utf-8") as file:
+    with open(f"limits_3D/lim3D_{zoom_name}_{resol_dx}m.json", "r", encoding="utf-8") as file:
         lim = json.loads(file.read())
     lim_min = lim["horiz_wind"][0]
     lim_max = lim["horiz_wind"][1]
@@ -178,11 +178,13 @@ def plot_horiz_wind(mesonh, my_map, zoom_name, resol_dx, level, *, anim = False)
         mesh=40
     else : 
         mesh=80
+    if zoom_name == "DX250_ZOOM" :
+        mesh = mesh//4 #0-2, 3-
     kwargs = {
         "x_mesh": mesh,
         "y_mesh": mesh,
-        "width": 0.015,
-        "scale": 7,
+        "width": 0.004, #0.015 0-8, 3-
+        "scale": 22, #7 0-11, 3-
         "scale_units": "xy",
         "units": "xy",
     }
@@ -207,7 +209,7 @@ def plot_horiz_wind(mesonh, my_map, zoom_name, resol_dx, level, *, anim = False)
 #VERTICAL WIND
 def plot_vert_wind(mesonh, my_map, zoom_name, resol_dx, level, *, anim = False):
     # # # Limits for colorbars
-    # with open(f"limits_3D/lim3D_{resol_dx}m.json", "r", encoding="utf-8") as file:
+    # with open(f"limits_3D/lim3D_{zoom_name}_{resol_dx}m.json", "r", encoding="utf-8") as file:
     #     lim = json.loads(file.read())
     # lim_min = lim["vert_wind"][0]
     # lim_max = lim["vert_wind"][1]
@@ -234,31 +236,89 @@ def plot_vert_wind(mesonh, my_map, zoom_name, resol_dx, level, *, anim = False):
     return (contourf, title), time, lim_min, lim_max, variable, label
 
 
+#AIR POTENTIAL TEMPERATURE
+def plot_potential_temp(mesonh, my_map, zoom_name, resol_dx, level, *, anim = False):
+    # # Limits for colorbars
+    with open(f"limits_3D/lim3D_{zoom_name}_{resol_dx}m.json", "r", encoding="utf-8") as file:
+        lim = json.loads(file.read())
+    lim_min = 30
+    lim_max = 50
+    
+    var = mesonh.get_var("THT", level=level)-273.15
+    contourf = my_map.plot_contourf(
+            var, cmap="turbo", extend="both", levels=np.linspace(lim_min, lim_max, 100)
+        )
+    
+    level_value = int(mesonh.level[level])
+    title = f"Simulation Méso-NH du 2022-08-18 à {time} (DX = {resol_dx} m)\nTempérature potentielle de l'air au niveau {level} (~{level_value} m) "
+    title = my_map.set_title(title)
+    
+    variable = "potential_temp"
+    label = "Température potentielle (°C)"
+    
+    if anim == False:
+        cbar = plt.colorbar(contourf, label=label)
+        cbar.set_ticks(np.linspace(lim_min, lim_max, 8))
+        plt.savefig(f"potential_temp_lvl{level}_{time}_dx{resol_dx}.png")
+
+    return (contourf, title), time, lim_min, lim_max, variable, label
+
+
+#TURBULENT KINETIC ENERGY
+def plot_turb_kin_energy(mesonh, my_map, zoom_name, resol_dx, level, *, anim = False):
+    # # Limits for colorbars
+    with open(f"limits_3D/lim3D_{zoom_name}_{resol_dx}m.json", "r", encoding="utf-8") as file:
+        lim = json.loads(file.read())
+    lim_min = 0
+    lim_max = lim["turb_kin_energy"][1]-100
+    
+    var = mesonh.get_var("TKET", level=level)
+    contourf = my_map.plot_contourf(
+            var, cmap="inferno", extend="max", levels=np.linspace(lim_min, lim_max, 100)
+        )
+    
+    level_value = int(mesonh.level[level])
+    title = f"Simulation Méso-NH du 2022-08-18 à {time} (DX = {resol_dx} m)\nÉnergie cinétique turbulente au niveau {level} (~{level_value} m) "
+    title = my_map.set_title(title)
+    
+    variable = "turb_kin_energy"
+    label = "Énergie cinétique turbulente (m²/s²)"
+    
+    if anim == False:
+        cbar = plt.colorbar(contourf, label=label)
+        cbar.set_ticks(np.linspace(lim_min, lim_max, 8))
+        plt.savefig(f"turb_kin_energy_temp_lvl{level}_{time}_dx{resol_dx}.png")
+
+    return (contourf, title), time, lim_min, lim_max, variable, label
+
+
 def plot_anim(mesonh, my_map, zoom_name, resol_dx, func):
     # print(mesonh.get_limits("PABST")) #/100
     # print(mesonh.get_limits("RCT", "RIT", "RGT", "RST", func=sum_clouds)) #*1000
     # print(mesonh.get_limits("RVT")) #*1000
     # print(mesonh.get_limits("UT", "VT", func=norm_wind)) #*3.6
     # print(mesonh.get_limits("WT"))
+    # print(mesonh.get_limits("THT")) #-273.15
+    # print(mesonh.get_limits("TKET")) 
     
     frame = []
-    for level in range(22, 84): #len(mesonh.level)
+    for level in range(0, len(mesonh.level)):
         frame_content, time, lim_min, lim_max, variable, label = func(mesonh, my_map, zoom_name, resol_dx, level, anim = True)
         
         frame.append(frame_content)
         
     cbar = plt.colorbar(frame_content[0], label=label)
-    cbar.set_ticks(np.linspace(116, 911, 8))
+    cbar.set_ticks(np.linspace(lim_min, lim_max, 8))
     
     animation = ArtistAnimation(fig, frame, interval=250)
     animation.save(f"{variable}_anim_{time}_dx{resol_dx}.gif")
     
     
-resol_dx = 1000
-level = 86
-index_echeance = 0
-zoom = DX1000_ZOOM
-zoom_name = "DX1000_ZOOM"
+resol_dx = 250
+level = 0
+index_echeance = 3
+zoom = DX250_ZOOM
+zoom_name = "DX250_ZOOM"
 
 mesonh = get_mesonh(resol_dx)
 i_lim, j_lim, hour, minute, file_index = zoom[index_echeance]
@@ -280,7 +340,7 @@ axes.set_extent([lon[0], lon[1], lat[0], lat[1]])
 
 
 #plot_pressure(mesonh, my_map, zoom_name, resol_dx, level, )
-plot_anim(mesonh, my_map, zoom_name, resol_dx, plot_pressure)
+#plot_anim(mesonh, my_map, zoom_name, resol_dx, plot_pressure)
 
 #plot_clouds(mesonh, my_map, zoom_name, resol_dx, level, )
 #plot_anim(mesonh, my_map, zoom_name, resol_dx, plot_clouds)
@@ -288,8 +348,14 @@ plot_anim(mesonh, my_map, zoom_name, resol_dx, plot_pressure)
 #plot_vapor(mesonh, my_map, zoom_name, resol_dx, level, )
 #plot_anim(mesonh, my_map, zoom_name, resol_dx, plot_vapor)
 
-#plot_horiz_wind(mesonh, my_map, zoom_name, resol_dx, level, )
+plot_horiz_wind(mesonh, my_map, zoom_name, resol_dx, level, )
 #plot_anim(mesonh, my_map, zoom_name, resol_dx, plot_horiz_wind)
 
 #plot_vert_wind(mesonh, my_map, zoom_name,  resol_dx, level, )
 #plot_anim(mesonh, my_map, zoom_name, resol_dx, plot_vert_wind)
+
+#plot_potential_temp(mesonh, my_map, zoom_name,  resol_dx, level, )
+#plot_anim(mesonh, my_map, zoom_name, resol_dx, plot_potential_temp)
+
+#plot_turb_kin_energy(mesonh, my_map, zoom_name,  resol_dx, level, )
+#plot_anim(mesonh, my_map, zoom_name, resol_dx, plot_turb_kin_energy)
