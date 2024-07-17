@@ -1,3 +1,4 @@
 *.png
 *.gif
 Animations_levels_champs_2D/
+__pycache__/
