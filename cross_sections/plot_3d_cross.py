@@ -1,23 +1,23 @@
+"""Some functions to plot cross sections with different variables from Meso-NH file."""
+
+from collections import namedtuple
+from collections.abc import Callable
 from datetime import datetime, timedelta
 
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import matplotlib.pyplot as plt
+import metpy.calc as mpcalc
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
-from netCDF4 import Dataset
-import metpy.calc as mpcalc
 from metpy.units import units
-from collections import namedtuple
+from netCDF4 import Dataset
 
 from misc_functions import oblique_proj
 
-plt.rcParams.update({
-    "text.usetex": True,
-    "font.family": "serif",
-    "font.size": 13,
-    # "figure.facecolor":  (0, 0, 0, 0)
-})
+plt.rcParams.update(
+    {"text.usetex": True, "font.family": "serif", "font.size": 13, "figure.facecolor": (0, 0, 0, 0)}
+)
 
 
 DX250_ZOOM = (
@@ -32,20 +32,48 @@ DX250_ZOOM = (
 Variable = namedtuple("Variable", ["values", "unit"])
 
 
-def calc(func, *variables, **kwargs):
+def calc(func: Callable, *variables):
+    """
+    Apply a metpy function over given 2D variables.
+
+    Parameters
+    ----------
+    func : Callable
+        The function to apply.
+    *variables
+        The Variables instances to be given to ``func``.
+
+    Returns
+    -------
+    np.array
+        The array of the result.
+    """
     result = []
     for j in range(variables[0].values.shape[0]):
         line = []
         for i in range(variables[0].values.shape[1]):
-            line.append(func(
-                *[var.values[j, i] * var.unit for var in variables],
-                **{name: var.values * var.unit for name, var in kwargs.items()}
-            ).magnitude)
+            line.append(func(*[var.values[j, i] * var.unit for var in variables]).magnitude)
         result.append(line)
     return np.array(result)
 
 
-def add_contourf(data, var: np.array, axes, label, **contourf_kw):
+def add_contourf(data: Dataset, var: np.array, axes: plt.Axes, label: str, **contourf_kw):
+    """
+    Add a contourf to the given axes.
+
+    Parameters
+    ----------
+    data : Dataset
+        The Meso-NH Dataset.
+    var : np.array
+        The variable to plot on the axes as a contourf.
+    axes : plt.Axes
+        The axes instance to plot ``var`` on.
+    label : str
+        The label of the colorbar.
+    **contourf_kw
+        Some keyword arguments to be passed to ``plt.contourf``.
+    """
     if "levels" not in contourf_kw:
         contourf_kw["levels"] = np.linspace(var.min(), var.max(), 100)
 
@@ -56,7 +84,41 @@ def add_contourf(data, var: np.array, axes, label, **contourf_kw):
     cbar.set_ticks(np.linspace(contourf_kw["levels"].min(), contourf_kw["levels"].max(), 10))
 
 
-def add_cross_contourf(data, var, axes, label, i_min, j_min, i_max, j_max, **contourf_kw):
+def add_cross_contourf(
+    data: Dataset,
+    var: np.array,
+    axes: plt.Axes,
+    label: str,
+    i_min: int,
+    j_min: int,
+    i_max: int,
+    j_max: int,
+    **contourf_kw,
+):
+    """
+    Add a cross section contourf on the given axes.
+
+    Parameters
+    ----------
+    data : Dataset
+        The Meso-NH Dataset.
+    var : np.array
+        The variable to plot on the axes as a contourf.
+    axes : plt.Axes
+        The axes instance to plot ``var`` on.
+    label : str
+        The label of the colorbar.
+    i_min : int
+        The minimum index on x-axis.
+    i_max : int
+        The maximum index on x-axis.
+    j_min : int
+        The minimum index on y-axis.
+    j_max : int
+        The minimum index on y-axis.
+    **contourf_kw
+        Some keyword arguments to be passed to ``plt.contourf``.
+    """
     level = data.variables["level"][:]
     var_cross = oblique_proj(
         var, data.variables["ni"][:], data.variables["nj"][:], level, i_min, j_min, i_max, j_max
@@ -82,55 +144,70 @@ def add_cross_contourf(data, var, axes, label, i_min, j_min, i_max, j_max, **con
     axes.set_ylabel("Altitude (m)")
 
 
-def rh_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
-    # pressure = oblique_proj(
-    #     data.variables["PABST"][0, :, :, :],
-    #     data.variables["ni"][:],
-    #     data.variables["nj"][:],
-    #     data.variables["level"][:],
-    #     i_min,
-    #     j_min,
-    #     i_max,
-    #     j_max,
-    # )[1]
-    # potential_temperature = oblique_proj(
-    #     data.variables["THT"][0, :, :, :],
-    #     data.variables["ni"][:],
-    #     data.variables["nj"][:],
-    #     data.variables["level"][:],
-    #     i_min,
-    #     j_min,
-    #     i_max,
-    #     j_max,
-    # )[1]
-    # mixing_ratio = oblique_proj(
-    #     data.variables["RVT"][0, :, :, :],
-    #     data.variables["ni"][:],
-    #     data.variables["nj"][:],
-    #     data.variables["level"][:],
-    #     i_min,
-    #     j_min,
-    #     i_max,
-    #     j_max,
-    # )[1]
+def rh_cross(data: Dataset, axes: plt.Axes, i_min: int, j_min: int, i_max: int, j_max: int):
+    """
+    Relative humidity cross section
 
-    # temperature = calc(
-    #     mpcalc.temperature_from_potential_temperature,
-    #     Variable(pressure, units("Pa")),
-    #     Variable(potential_temperature, units("K"))
-    # )
-    # print("Temperature: ok")
+    Parameters
+    ----------
+    data : Dataset
+        The Meso-NH dataset.
+    axes : plt.Axes
+        The axes to draw on.
+    i_min : int
+        The minimum index on x-axis.
+    i_max : int
+        The maximum index on x-axis.
+    j_min : int
+        The minimum index on y-axis.
+    j_max : int
+        The minimum index on y-axis.
+    """
+    pressure = oblique_proj(
+        data.variables["PABST"][0, :, :, :],
+        data.variables["ni"][:],
+        data.variables["nj"][:],
+        data.variables["level"][:],
+        i_min,
+        j_min,
+        i_max,
+        j_max,
+    )[1]
+    potential_temperature = oblique_proj(
+        data.variables["THT"][0, :, :, :],
+        data.variables["ni"][:],
+        data.variables["nj"][:],
+        data.variables["level"][:],
+        i_min,
+        j_min,
+        i_max,
+        j_max,
+    )[1]
+    mixing_ratio = oblique_proj(
+        data.variables["RVT"][0, :, :, :],
+        data.variables["ni"][:],
+        data.variables["nj"][:],
+        data.variables["level"][:],
+        i_min,
+        j_min,
+        i_max,
+        j_max,
+    )[1]
 
-    # relative_humidity = calc(
-    #     mpcalc.relative_humidity_from_mixing_ratio,
-    #     Variable(pressure, units("Pa")),
-    #     Variable(temperature, units("K")),
-    #     Variable(mixing_ratio, units("kg/kg"))
-    # )
-    # print("Relative humidity: ok")
+    temperature = calc(
+        mpcalc.temperature_from_potential_temperature,
+        Variable(pressure, units("Pa")),
+        Variable(potential_temperature, units("K")),
+    )
+    print("Temperature: ok")
 
-    with open("DX250_0500Z_RH_cross.npy", "rb") as file:
-        relative_humidity = np.load(file) * 1e2
+    relative_humidity = calc(
+        mpcalc.relative_humidity_from_mixing_ratio,
+        Variable(pressure, units("Pa")),
+        Variable(temperature, units("K")),
+        Variable(mixing_ratio, units("kg/kg")),
+    )
+    print("Relative humidity: ok")
 
     # Relative humidity contourf
     contourf = axes.contourf(
@@ -138,7 +215,7 @@ def rh_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
         np.array(range(relative_humidity.shape[0])),
         relative_humidity,
         cmap=LinearSegmentedColormap.from_list("", ["black", "white", "blue", "red"]),
-        levels=np.linspace(0, 100, 100)
+        levels=np.linspace(0, 100, 100),
     )
     cbar = plt.colorbar(contourf, ax=axes, label=r"Humidité relative (\%)", location="bottom")
     cbar.set_ticks(np.linspace(0, 100, 6))
@@ -207,7 +284,18 @@ def rh_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
     axes.set_ylabel("Altitude (m)")
 
 
-def rvt_map(data: Dataset, axes):
+def rvt_map(data: Dataset, axes: plt.Axes):
+    """
+    Plot vapour mixing ratio map.
+
+    Parameters
+    ----------
+    data : Dataset
+        The Meso-NH dataset.
+    axes : plt.Axes
+        The axes to draw on.
+    """
+
     var = data.variables["RVT"][0, :, :, :] * 1e3
     add_contourf(
         data,
@@ -218,7 +306,25 @@ def rvt_map(data: Dataset, axes):
     )
 
 
-def rvt_cross(data, axes, i_min, j_min, i_max, j_max):
+def rvt_cross(data: Dataset, axes: plt.Axes, i_min: int, j_min: int, i_max: int, j_max: int):
+    """
+    Plot vapour mixing ratio cross section.
+
+    Parameters
+    ----------
+    data : Dataset
+        The Meso-NH dataset.
+    axes : plt.Axes
+        The axes to draw on.
+    i_min : int
+        The minimum index on x-axis.
+    i_max : int
+        The maximum index on x-axis.
+    j_min : int
+        The minimum index on y-axis.
+    j_max : int
+        The minimum index on y-axis.
+    """
     var = data.variables["RVT"][0, :, :, :] * 1e3
     add_cross_contourf(
         data,
@@ -253,7 +359,17 @@ def rvt_cross(data, axes, i_min, j_min, i_max, j_max):
     plt.clabel(c, levels=[700])
 
 
-def pressure_map(data: Dataset, axes):
+def pressure_map(data: Dataset, axes: plt.Axes):
+    """Plot
+    pressure map.
+
+    Parameters
+    ----------
+    data : Dataset
+        The Meso-NH dataset.
+    axes : plt.Axes
+        The axes to draw on.
+    """
     var = data.variables["PABST"][0, :, :, :] * 1e-2
     add_contourf(
         data,
@@ -264,7 +380,25 @@ def pressure_map(data: Dataset, axes):
     )
 
 
-def pressure_cross(data, axes, i_min, j_min, i_max, j_max):
+def pressure_cross(data: Dataset, axes: plt.Axes, i_min: int, j_min: int, i_max: int, j_max: int):
+    """
+    Plot pressure cross section.
+
+    Parameters
+    ----------
+    data : Dataset
+        The Meso-NH dataset.
+    axes : plt.Axes
+        The axes to draw on.
+    i_min : int
+        The minimum index on x-axis.
+    i_max : int
+        The maximum index on x-axis.
+    j_min : int
+        The minimum index on y-axis.
+    j_max : int
+        The minimum index on y-axis.
+    """
     var = data.variables["PABST"][0, :, :, :] * 1e-2
     add_cross_contourf(
         data,
@@ -280,8 +414,18 @@ def pressure_cross(data, axes, i_min, j_min, i_max, j_max):
     )
 
 
-def tket_map(data: Dataset, axes):
-    var = data.variables["TKET"][0, :, 1260: 1530, 1150: 1450]
+def tket_map(data: Dataset, axes: plt.Axes):
+    """P
+    lot turbulent kinetic energy map.
+
+    Parameters
+    ----------
+    data : Dataset
+        The Meso-NH dataset.
+    axes : plt.Axes
+        The axes to draw on.
+    """
+    var = data.variables["TKET"][0, :, 1260:1530, 1150:1450]
     add_contourf(
         data,
         var[77],
@@ -293,24 +437,50 @@ def tket_map(data: Dataset, axes):
     )
 
 
-def clouds_map(data: Dataset, axes):
+def clouds_map(data: Dataset, axes: plt.Axes):
+    """Plo
+    t clouds map.
+
+    Parameters
+    ----------
+    data : Dataset
+        The Meso-NH dataset.
+    axes : plt.Axes
+        The axes to draw on.
+    """
     var = (
         data.variables["RIT"][0, :, :, :]
         + data.variables["RST"][0, :, :, :]
         + data.variables["RGT"][0, :, :, :]
-    )[:, 1260: 1530, 1150: 1450] * 1e3
+    )[:, 1260:1530, 1150:1450] * 1e3
     add_contourf(
         data,
         var[77],
         axes,
-        (
-            "Somme des rapports de mélanges des états condensés"
-        ),
+        ("Somme des rapports de mélanges des états condensés"),
         cmap=LinearSegmentedColormap.from_list("", ["black", "white", "blue", "red"]),
     )
 
 
-def clouds_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
+def clouds_cross(data: Dataset, axes: plt.Axes, i_min: int, j_min: int, i_max: int, j_max: int):
+    """
+    Plot clouds cross section.
+
+    Parameters
+    ----------
+    data : Dataset
+        The Meso-NH dataset.
+    axes : plt.Axes
+        The axes to draw on.
+    i_min : int
+        The minimum index on x-axis.
+    i_max : int
+        The maximum index on x-axis.
+    j_min : int
+        The minimum index on y-axis.
+    j_max : int
+        The minimum index on y-axis.
+    """
     var = (
         data.variables["RCT"][0, :, :, :]
         + data.variables["RIT"][0, :, :, :]
@@ -330,7 +500,17 @@ def clouds_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
     )
 
 
-def wind_w_map(data: Dataset, axes):
+def wind_w_map(data: Dataset, axes: plt.Axes):
+    """Plo
+    t vertical wind speed map.
+
+    Parameters
+    ----------
+    data : Dataset
+        The Meso-NH dataset.
+    axes : plt.Axes
+        The axes to draw on.
+    """
     var = data.variables["WT"][0, :, :, :]
     add_contourf(
         data,
@@ -342,7 +522,25 @@ def wind_w_map(data: Dataset, axes):
     )
 
 
-def wind_w_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
+def wind_w_cross(data: Dataset, axes: plt.Axes, i_min: int, j_min: int, i_max: int, j_max: int):
+    """
+    Plot vertical wind speed cross section.
+
+    Parameters
+    ----------
+    data : Dataset
+        The Meso-NH dataset.
+    axes : plt.Axes
+        The axes to draw on.
+    i_min : int
+        The minimum index on x-axis.
+    i_max : int
+        The maximum index on x-axis.
+    j_min : int
+        The minimum index on y-axis.
+    j_max : int
+        The minimum index on y-axis.
+    """
     wt = data.variables["WT"][0, :, :, :]
     wt_cross = oblique_proj(
         wt,
@@ -356,7 +554,7 @@ def wind_w_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
     )[1]
 
     ut = data.variables["UT"][0, :, :, :]
-    ut = ut - np.mean(Dataset("CORSE.1.SEG01.019.vars.nc").variables["UT"][0, 28, 0: 1500, 0: 1250])
+    ut = ut - np.mean(Dataset("CORSE.1.SEG01.019.vars.nc").variables["UT"][0, 28, 0:1500, 0:1250])
 
     ut_cross = oblique_proj(
         ut,
@@ -379,7 +577,7 @@ def wind_w_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
         i_max,
         j_max,
         cmap="seismic",
-        norm=TwoSlopeNorm(0)
+        norm=TwoSlopeNorm(0),
     )
 
     mesh = ut_cross.shape[1] // 20
@@ -387,7 +585,7 @@ def wind_w_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
         np.array(range(0, ut_cross.shape[1], mesh)),
         np.array(range(0, ut_cross.shape[0], 5)),
         ut_cross[::5, ::mesh],
-        wt_cross[::5, ::mesh]
+        wt_cross[::5, ::mesh],
     )
 
     var = (
@@ -415,7 +613,25 @@ def wind_w_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
     )
 
 
-def rain_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
+def rain_cross(data: Dataset, axes: plt.Axes, i_min: int, j_min: int, i_max: int, j_max: int):
+    """
+    Plot rain cross section.
+
+    Parameters
+    ----------
+    data : Dataset
+        The Meso-NH dataset.
+    axes : plt.Axes
+        The axes to draw on.
+    i_min : int
+        The minimum index on x-axis.
+    i_max : int
+        The maximum index on x-axis.
+    j_min : int
+        The minimum index on y-axis.
+    j_max : int
+        The minimum index on y-axis.
+    """
     # Rain
     var = data.variables["RRT"][0, :, :, :] * 1e3
     add_cross_contourf(
@@ -456,7 +672,25 @@ def rain_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
     )
 
 
-def snow_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
+def snow_cross(data: Dataset, axes: plt.Axes, i_min: int, j_min: int, i_max: int, j_max: int):
+    """
+    Plot snow cross section.
+
+    Parameters
+    ----------
+    data : Dataset
+        The Meso-NH dataset.
+    axes : plt.Axes
+        The axes to draw on.
+    i_min : int
+        The minimum index on x-axis.
+    i_max : int
+        The maximum index on x-axis.
+    j_min : int
+        The minimum index on y-axis.
+    j_max : int
+        The minimum index on y-axis.
+    """
     var = data.variables["RST"][0, :, :, :] * 1e3
     add_cross_contourf(
         data,
@@ -496,7 +730,25 @@ def snow_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
     )
 
 
-def ice_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
+def ice_cross(data: Dataset, axes: plt.Axes, i_min: int, j_min: int, i_max: int, j_max: int):
+    """
+    Plot ice cross section.
+
+    Parameters
+    ----------
+    data : Dataset
+        The Meso-NH dataset.
+    axes : plt.Axes
+        The axes to draw on.
+    i_min : int
+        The minimum index on x-axis.
+    i_max : int
+        The maximum index on x-axis.
+    j_min : int
+        The minimum index on y-axis.
+    j_max : int
+        The minimum index on y-axis.
+    """
     var = data.variables["RIT"][0, :, :, :] * 1e3
     add_cross_contourf(
         data,
@@ -536,7 +788,25 @@ def ice_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
     )
 
 
-def graupel_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
+def graupel_cross(data: Dataset, axes: plt.Axes, i_min: int, j_min: int, i_max: int, j_max: int):
+    """
+    Plot graupel cross section.
+
+    Parameters
+    ----------
+    data : Dataset
+        The Meso-NH dataset.
+    axes : plt.Axes
+        The axes to draw on.
+    i_min : int
+        The minimum index on x-axis.
+    i_max : int
+        The maximum index on x-axis.
+    j_min : int
+        The minimum index on y-axis.
+    j_max : int
+        The minimum index on y-axis.
+    """
     var = data.variables["RGT"][0, :, :, :] * 1e3
     add_cross_contourf(
         data,
@@ -576,7 +846,25 @@ def graupel_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
     )
 
 
-def cloudwater_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
+def cloudwater_cross(data: Dataset, axes: plt.Axes, i_min: int, j_min: int, i_max: int, j_max: int):
+    """
+    Plot cloud water cross section.
+
+    Parameters
+    ----------
+    data : Dataset
+        The Meso-NH dataset.
+    axes : plt.Axes
+        The axes to draw on.
+    i_min : int
+        The minimum index on x-axis.
+    i_max : int
+        The maximum index on x-axis.
+    j_min : int
+        The minimum index on y-axis.
+    j_max : int
+        The minimum index on y-axis.
+    """
     var = data.variables["RCT"][0, :, :, :] * 1e3
     add_cross_contourf(
         data,
@@ -616,7 +904,17 @@ def cloudwater_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
     )
 
 
-def tht_map(data: Dataset, axes):
+def tht_map(data: Dataset, axes: plt.Axes):
+    """
+    Plot potential temperature map.
+
+    Parameters
+    ----------
+    data : Dataset
+        The Meso-NH dataset.
+    axes : plt.Axes
+        The axes to draw on.
+    """
     var = data.variables["THT"][0, :, :, :]
     add_contourf(
         data,
@@ -627,7 +925,25 @@ def tht_map(data: Dataset, axes):
     )
 
 
-def tht_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
+def tht_cross(data: Dataset, axes: plt.Axes, i_min: int, j_min: int, i_max: int, j_max: int):
+    """
+    Plot potential temperature cross section
+
+    Parameters
+    ----------
+    data : Dataset
+        The Meso-NH dataset.
+    axes : plt.Axes
+        The axes to draw on.
+    i_min : int
+        The minimum index on x-axis.
+    i_max : int
+        The maximum index on x-axis.
+    j_min : int
+        The minimum index on y-axis.
+    j_max : int
+        The minimum index on y-axis.
+    """
     var = data.variables["THT"][0, :, :, :]
     add_cross_contourf(
         data,
@@ -640,7 +956,7 @@ def tht_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
         j_max,
         cmap="turbo",
         levels=np.linspace(288, 333, 100),
-        extend="both"
+        extend="both",
     )
 
     # Clouds contour
@@ -669,7 +985,25 @@ def tht_cross(data: Dataset, axes, i_min, j_min, i_max, j_max):
     )
 
 
-def plot_figure_hydro(filename, resol_dx, func_map, i_min, j_min, i_max, j_max):
+def plot_figure_hydro(filename: str, resol_dx: int, i_min: int, j_min: int, i_max: int, j_max: int):
+    """
+    Show a cross-section of the different hydrometeor types and their distribution within the cloud.
+
+    Parameters
+    ----------
+    filename : str
+        The Meso-NH file to open.
+    resol_dx : int
+        The horizontal resolution (only for display purpose).
+    i_min : int
+        The minimum index on x-axis.
+    i_max : int
+        The maximum index on x-axis.
+    j_min : int
+        The minimum index on y-axis.
+    j_max : int
+        The minimum index on y-axis.
+    """
     # Open data and get time
     data = Dataset(filename)
     time = datetime.strptime("2022-08-18 00:00:00", "%Y-%m-%d %H:%M:%S") + timedelta(
@@ -681,32 +1015,13 @@ def plot_figure_hydro(filename, resol_dx, func_map, i_min, j_min, i_max, j_max):
     fig.suptitle(f"Meso-NH simulation on {time} (DX = {resol_dx} m)\nVertical cross section")
     gridspec = plt.GridSpec(2, 3, figure=fig)
 
-    # Draw cross section on a map
-    # axes = fig.add_subplot(gridspec[:, 0: 2], projection=ccrs.PlateCarree())
-    # axes.add_feature(cfeature.COASTLINE, color="gray")
-    # axes.add_feature(cfeature.BORDERS, color="gray")
-    # glines = axes.gridlines(draw_labels=True, linewidth=0.4, alpha=0.5)
-    # glines.top_labels = glines.right_labels = False
-    # func_map(data, axes)
-
-    # # Extract lon/lat cross section
-    # lon_min = data.variables["longitude"][j_min, i_min]
-    # lat_min = data.variables["latitude"][j_min, i_min]
-    # lon_max = data.variables["longitude"][j_max, i_max]
-    # lat_max = data.variables["latitude"][j_max, i_max]
-
-    # # Display cross section
-    # axes.plot([lon_min, lon_max], [lat_min, lat_max], color="red", linewidth=2)
-    # plt.text(lon_min, lat_min, "A", color="red", fontsize=15)
-    # plt.text(lon_max, lat_max, "B", color="red", fontsize=15)
-
     # Draw the cross section on the other fig
     axes = fig.add_subplot(gridspec[0, 0])
     rain_cross(data, axes, i_min, j_min, i_max, j_max)
 
     axes = fig.add_subplot(gridspec[0, 1])
     snow_cross(data, axes, i_min, j_min, i_max, j_max)
-    
+
     axes = fig.add_subplot(gridspec[1, 0])
     ice_cross(data, axes, i_min, j_min, i_max, j_max)
 
@@ -717,7 +1032,38 @@ def plot_figure_hydro(filename, resol_dx, func_map, i_min, j_min, i_max, j_max):
     cloudwater_cross(data, axes, i_min, j_min, i_max, j_max)
 
 
-def plot_figure(filename, resol_dx, func_map, func_cross, i_min, j_min, i_max, j_max):
+def plot_figure(
+    filename: str,
+    resol_dx: int,
+    func_map: Callable,
+    func_cross: Callable,
+    i_min: int,
+    j_min: int,
+    i_max: int,
+    j_max: int,
+):
+    """
+    Plot a cross-section and the associated map.
+
+    Parameters
+    ----------
+    filename : str
+        The Meso-NH file to open.
+    resol_dx : int
+        The horizontal resolution (only for display purpose).
+    func_map : Callable
+        The function to be used to plot the map.
+    func_cross : Callable
+        The function to be used to plot the cross section.
+    i_min : int
+        The minimum index on x-axis.
+    i_max : int
+        The maximum index on x-axis.
+    j_min : int
+        The minimum index on y-axis.
+    j_max : int
+        The minimum index on y-axis.
+    """
     # Open data and get time
     data = Dataset(filename)
     time = datetime.strptime("2022-08-18 00:00:00", "%Y-%m-%d %H:%M:%S") + timedelta(
@@ -752,7 +1098,24 @@ def plot_figure(filename, resol_dx, func_map, func_cross, i_min, j_min, i_max, j
     func_cross(data, axes, i_min, j_min, i_max, j_max)
 
 
-def quick_view(filename, i_min, j_min, i_max, j_max):
+def quick_view(filename: str, i_min: int, j_min: int, i_max: int, j_max: int):
+    """
+    Display a map with the cross section on it to quickly see where the cross section will pass.
+
+    Parameters
+    ----------
+    filename : str
+        The Meso-NH file to open.
+    i_min : int
+        The minimum index on x-axis.
+    i_max : int
+        The maximum index on x-axis.
+    j_min : int
+        The minimum index on y-axis.
+    j_max : int
+        The minimum index on y-axis.
+    """
+
     plt.figure()
     data = Dataset(filename)
 
@@ -764,17 +1127,14 @@ def quick_view(filename, i_min, j_min, i_max, j_max):
 
     # var = data.variables["RVT"][0, 42, :, :] * 1e3
 
-    var = np.sqrt(
-        data.variables["UT"][0, 28, :, :] ** 2
-        + data.variables["VT"][0, 28, :, :] ** 2
-    )
+    var = np.sqrt(data.variables["UT"][0, 28, :, :] ** 2 + data.variables["VT"][0, 28, :, :] ** 2)
 
     plt.plot([0, 0, 1250, 1250, 0], [0, 1500, 1500, 0, 0], color="red")
 
     contourf = plt.contourf(
         var,
         levels=np.linspace(var.min(), var.max(), 100),
-        cmap=LinearSegmentedColormap.from_list("", ["black", "white", "blue", "red"])
+        cmap=LinearSegmentedColormap.from_list("", ["black", "white", "blue", "red"]),
     )
     plt.colorbar(contourf)
 
@@ -782,7 +1142,7 @@ def quick_view(filename, i_min, j_min, i_max, j_max):
         np.arange(0, 2050, 50),
         np.arange(0, 2050, 50),
         data.variables["UT"][0, 28, ::50, ::50],
-        data.variables["VT"][0, 28, ::50, ::50]
+        data.variables["VT"][0, 28, ::50, ::50],
     )
 
     plt.plot([i_min, i_max], [j_min, j_max], color="red", linewidth=2)
@@ -790,20 +1150,18 @@ def quick_view(filename, i_min, j_min, i_max, j_max):
     plt.text(i_max, j_max, "B", color="red", fontsize=15)
 
 
-i_min, j_min = 350, 614
-i_max, j_max = 1100, 614
-filename = "CORSE.1.SEG01.004.vars.nc"
+if __name__ == "__main__":
+    i_min, j_min = 350, 614
+    i_max, j_max = 1100, 614
+    filename = "CORSE.1.SEG01.004.vars.nc"
 
+    # quick_view(filename, i_min, j_min, i_max, j_max)
 
-# quick_view(filename, i_min, j_min, i_max, j_max)
+    # plot_figure_hydro(filename, 250, clouds_map, i_min, j_min, i_max, j_max)
+    # plot_figure(filename, 250, wind_w_map, wind_w_cross, i_min, j_min, i_max, j_max)
+    # plot_figure(filename, 250, tht_map, tht_cross, i_min, j_min, i_max, j_max)
+    plot_figure(filename, 250, rvt_map, rh_cross, i_min, j_min, i_max, j_max)
+    # plot_figure(filename, 250, rvt_map, rvt_cross, i_min, j_min, i_max, j_max)
+    # plot_figure(filename, 250, tket_map, clouds_cross, i_min, j_min, i_max, j_max)
 
-# plot_figure_hydro(filename, 250, clouds_map, i_min, j_min, i_max, j_max)
-# plot_figure(filename, 250, wind_w_map, wind_w_cross, i_min, j_min, i_max, j_max)
-# plot_figure(filename, 250, tht_map, tht_cross, i_min, j_min, i_max, j_max)
-plot_figure(filename, 250, rvt_map, rh_cross, i_min, j_min, i_max, j_max)
-# plot_figure(filename, 250, rvt_map, rvt_cross, i_min, j_min, i_max, j_max)
-# plot_figure(filename, 250, tket_map, clouds_cross, i_min, j_min, i_max, j_max)
-
-
-
-plt.show()
+    plt.show()

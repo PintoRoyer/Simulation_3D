@@ -1,3 +1,4 @@
+"""Plot the equivalent potential temperature."""
 from datetime import datetime, timedelta
 
 import numpy as np
